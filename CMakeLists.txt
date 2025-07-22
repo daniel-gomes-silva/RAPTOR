@@ -9,6 +9,11 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the build type" FORCE)
 endif()
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(HIREDIS REQUIRED hiredis)
+
+include_directories(${HIREDIS_INCLUDE_DIRS})
+link_directories(${HIREDIS_LIBRARY_DIRS})
 
 include_directories(.)
 
@@ -33,4 +38,4 @@ add_library(raptor_lib
 target_include_directories(raptor_lib PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
 add_executable(raptor src/main.cpp)
-target_link_libraries(raptor raptor_lib)
+target_link_libraries(raptor raptor_lib ${HIREDIS_LIBRARIES})

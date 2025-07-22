@@ -3,7 +3,11 @@
  * @brief Entry point for the RAPTOR application.
  *
  * This file initializes the application, parses input directories, and starts
- * the main event loop for processing user queries.
+ * the main event loop for processing user queries (this code is commented out).
+ *
+ * UPDATE: This file initializes the RAPTOR application with hardcoded GTFS datasets from Porto (metro and STCP)
+ * and sets up a REST API server for transit routing queries.
+ *
  */
 
 #include <iostream>
@@ -48,42 +52,53 @@
 }*/
 
 int main() {
-    std::vector<std::string> inputDirectories = {
+    const std::vector<std::string> inputDirectories = {
         "../datasets/Porto/metro/GTFS/",
         "../datasets/Porto/stcp/GTFS/"
     };
 
-    // Initialize and run the application
+    // Initialize RAPTOR algorithm
     Application application(inputDirectories);
-    application.run();
+    application.initializeRaptor();
 
     crow::SimpleApp app;
 
     CROW_ROUTE(app, "/query").methods("POST"_method)
     ([&application](const crow::request &req) {
         auto body = crow::json::load(req.body);
-        if (!body) return crow::response(400, "Invalid JSON");
+        if (!body) return crow::response(crow::status::BAD_REQUEST, "Invalid JSON");
 
+        if (!body.has("source") || !body.has("target")) {
+            return crow::response(crow::status::BAD_REQUEST, "Missing required fields");
+        }
         std::string source = body["source"].s();
+        std::transform(source.begin(), source.end(), source.begin(), ::toupper);
         std::string target = body["target"].s();
-        int year = body["year"].i();
-        int month = body["month"].i();
-        int day = body["day"].i();
-        int hours = body["hours"].i();
-        int minutes = body["minutes"].i();
+        std::transform(target.begin(), target.end(), target.begin(), ::toupper);
+        if (!application.isValidStop(source) || !application.isValidStop(target)) {
+            return crow::response(crow::status::BAD_REQUEST, "Invalid source or target stop ID");
+        }
 
-        /*
-        std::cout << "...:::QUERY RECEIVED:::..." << std::endl;
-        std::cout << "Source: " << source << std::endl;
-        std::cout << "Target: " << target << std::endl;
-        std::cout << "Year: " << year << ", Month: " << month << ", Day: " << day << std::endl;
-        std::cout << "Hours: " << hours << ", Minutes: " << minutes << std::endl;
-        */
+        // Get current time and set default values if not provided
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+        std::tm *now_tm = std::localtime(&now_c);
 
-        application.handleQueryAPI(source, target, year, month, day, hours, minutes);
+        int year = body.has("year") ? body["year"].i() : (now_tm->tm_year + 1900);
+        int month = body.has("month") ? body["month"].i() : (now_tm->tm_mon + 1);
+        int day = body.has("day") ? body["day"].i() : now_tm->tm_mday;
+        int hours = body.has("hours") ? body["hours"].i() : now_tm->tm_hour;
+        int minutes = body.has("minutes") ? body["minutes"].i() : now_tm->tm_min;
 
-        // No response sent to client
-        return crow::response();
+        // TODO: improve validation (30th February, etc.)
+        if (year < 2000 || month < 1 || month > 12 || day < 1 || day > 31 ||
+            hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+            return crow::response(crow::status::BAD_REQUEST, "Invalid date/time values");
+        }
+
+        auto result = application.handleQueryAPI(source, target, year, month, day, hours, minutes);
+
+        return crow::response(crow::status::OK, result);
     });
 
     //set the port, set the app to run on multiple threads, and run the app

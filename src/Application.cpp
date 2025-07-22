@@ -5,8 +5,8 @@
  * This file contains the implementation of the Application class, which manages
  * the initialization and execution of the RAPTOR application.
  *
- * @autor Maria
- * @date 11/11/2024
+ * @autor Maria Rabelo and Daniel Gomes Silva
+ * @date 22/07/2025
  */
 #include "Application.h"
 
@@ -17,27 +17,27 @@ Application::Application(std::vector<std::string> inputDirectories)
 void Application::run() {
     initializeRaptor();
 
-    /*std::string command;
+    std::string command;
     showCommands();
 
     while (true) {
-      std::cout << std::endl << "Type a command: ";
-      std::getline(std::cin, command);
+        std::cout << std::endl << "Type a command: ";
+        std::getline(std::cin, command);
 
-      Utils::clean(command);
+        Utils::clean(command);
 
-      if (command == "query") {
-        handleQuery();
-      } else if (command == "help") {
-        showCommands();
-      } else if (command == "quit") {
-        std::cout << "Quitting program..." << std::endl;
-        break;
-      } else {
-        std::cout << "Invalid command. :/" << std::endl;
-        showCommands();
-      }
-    }*/
+        if (command == "query") {
+            handleQuery();
+        } else if (command == "help") {
+            showCommands();
+        } else if (command == "quit") {
+            std::cout << "Quitting program..." << std::endl;
+            break;
+        } else {
+            std::cout << "Invalid command. :/" << std::endl;
+            showCommands();
+        }
+    }
 }
 
 void Application::initializeRaptor() {
@@ -109,8 +109,45 @@ void Application::handleQuery() {
     }
 }
 
-void Application::handleQueryAPI(const std::string &source, const std::string &target,
-                                 const int year, const int month, const int day, const int hours, const int minutes) {
+nlohmann::json Application::serializeJourneys(const std::vector<Journey> &journeys) {
+    nlohmann::json journeysJson = nlohmann::json::array();
+
+    int journeyCounter = 1;
+    for (const auto &journey: journeys) {
+        std::cout << std::endl << "Journey " << journeyCounter << " (" << Utils::secondsToTime(journey.duration) << "): "
+        << std::endl << std::endl;
+        Raptor::showJourney(journey);
+
+        nlohmann::json j;
+        j["duration"] = journey.duration;
+        j["steps"] = nlohmann::json::array();
+
+        int step_id = 1;
+        for (const auto &step: journey.steps) {
+            j["steps"].push_back({
+                {"step_id", step_id++},
+                {"day", Utils::dayToString(step.day)},
+                {"departure_secs", step.departure_secs},
+                {"src_stop_id", step.src_stop->getField("stop_id")},
+                {"src_stop_name", Utils::getFirstWord(step.src_stop->getField("stop_name"))},
+                {"step_duration_secs", step.duration},
+                {"dest_stop_id", step.dest_stop->getField("stop_id")},
+                {"dest_stop_name", Utils::getFirstWord(step.dest_stop->getField("stop_name"))},
+                {"arrival_secs", step.arrival_secs % 86400}, // 24 * 60 * 60 = 86400 seconds in a day
+                {"trip_id", step.trip_id.value_or("footpath")},
+                {"agency_name", step.trip_id ? Utils::getFirstWord(step.agency_name.value()) : ""}
+            });
+        }
+        journeysJson.push_back(j);
+        journeyCounter++;
+    }
+
+    return journeysJson;
+}
+
+std::string Application::handleQueryAPI(const std::string &source, const std::string &target,
+                                        const int year, const int month,
+                                        const int day, const int hours, const int minutes) {
     Query query = {source, target, getDate(year, month, day), {hours, minutes, 0}};
     raptor_->setQuery(query);
 
@@ -120,21 +157,18 @@ void Application::handleQueryAPI(const std::string &source, const std::string &t
 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
-    std::cout << "Took " << duration << " ms (" << std::round(static_cast<double>(duration) / 1000.0) <<
-            " seconds) to look for journeys."
-            << std::endl;
+    nlohmann::json response;
+    response["elapsed_time_ms"] = duration;
+    response["journeys_length"] = journeys.size();
+    response["journeys"] = serializeJourneys(journeys);
 
-    if (journeys.empty()) std::cout << "No journey found :/" << std::endl;
-    else {
-        std::cout << "Found " << journeys.size() << " journey(s)! =) " << std::endl;
-        for (int i = 0; i < journeys.size(); i++) {
-            const Journey &journey = journeys[i];
-            int journey_duration = journey.duration;
-            std::cout << std::endl << "Journey " << i + 1 << " (" << Utils::secondsToTime(journey_duration) << "): "
-                    << std::endl << std::endl;
-            Raptor::showJourney(journey);
-        }
-    }
+    return response.dump();
+}
+
+bool Application::isValidStop(const std::string &stopId) const {
+    if (raptor_->getStops().find(stopId) != raptor_->getStops().end())
+        return true;
+    return false;
 }
 
 Query Application::getQuery() {
