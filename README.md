@@ -2,6 +2,163 @@
 This project implements the Round-Based Public Transit Routing (RAPTOR) algorithm, 
 enabling efficient public transport route searches based on GTFS data.
 
+## What's New
+
+### Transition from CLI to REST API
+
+The application's entry point `main.cpp` has been significantly refactored to modernize its interface. 
+The original interactive command-line interface (CLI) has been replaced with a persistent **RESTful API server** 
+built using the [Crow framework](https://crowcpp.org/master/). This change shifts the application from a standalone, 
+interactive tool to a backend service that can be easily integrated with web frontends, mobile apps, or other services.
+
+**Key Changes:**
+- **Hardcoded Datasets**: For demonstration purposes, the application is now hardcoded to load GTFS data for Porto's 
+metro and STCP bus networks from the `../datasets/` directory
+- **Web Server**: It initializes a Crow web server that listens on `port 18080`
+- **API Endpoint**: It provides a single endpoint, `POST /query`, to handle all routing requests
+
+**How to Use the API**
+1. **Run the application**. The server will start and listen on port `18080`
+2. **Send a POST request** to `http://localhost:18080/query` with a JSON body specifying the `source` and `target` 
+stop IDs. You can also provide an optional date and time. If the date/time is omitted, the server uses the current 
+system time
+
+**Request Body JSON Fields**:
+
+- `source` (string, **required**): The ID of the starting stop (e.g., "FEUP2")
+- `target` (string, **required**): The ID of the destination stop (e.g., "FCUP1")
+- `year` (int, optional): The departure year
+- `month` (int, optional): The departure month (1-12)
+- `day` (int, optional): The departure day
+- `hours` (int, optional): The departure hour (0-23)
+- `minutes` (int, optional): The departure minute (0-59)
+
+**Examples using `curl`**:
+
+```bash
+curl -X POST http://localhost:18080/query \
+     -H "Content-Type: application/json" \
+     -d '{"source": "FEUP2", "target": "FCUP1"}'
+```
+
+```bash
+curl -X POST http://localhost:18080/query \
+     -H "Content-Type: application/json" \
+     -d '{"source": "FEUP2", "target": "FCUP1", "year": 2025, "month": 7, "day": 23, "hours": 9, "minutes": 30}'
+```
+
+**API Response Format**
+
+The `POST /query` endpoint returns a JSON object containing the query details and a list of possible journeys to get 
+from the origin to the destination. The structure of the main JSON response object is as follows:
+
+- **Top-Level Object**
+
+| Key | Type | Description |
+|----------|----------|----------|
+| `elapsed_time_ms` | Number | The time, in milliseconds, that the server took to process the request |
+| `journeys_length` | Number | The total number of journey options found |
+| `journeys` | Array | An array of objects, where each object represents a complete journey option |
+
+- **Journey Object (within the `journeys` array)**  
+Each object within the journeys array represents a complete journey and has the following structure:
+
+| Key | Type | Description |
+|----------|----------|----------|
+| `duration` | Number | The total duration of the journey in seconds |
+| `steps` | Array | An array of objects, where each object represents a step or segment of the journey (e.g., walking, taking a bus) |
+
+- **Step Object (within the `steps` array)**  
+Each step of the journey contains detailed information about that segment:
+
+| Key | Type   | Description |
+|----------|--------|----------|
+| `step_id` | Number | A sequential identifier for the step within the journey (1, 2, 3, ...) |
+| `day` | String | Indicates if this step begins on the current day or next day |
+| `departure_secs` | Number | The departure time for this step, in seconds since midnight|
+| `src_stop_id` | String | The ID of the origin stop for this step |
+| `src_stop_name` | String | The name of the origin stop |
+| `step_duration_secs` | Number | The duration of this step only, in seconds |
+| `dest_stop_id` | String | The ID of the destination stop for this step |
+| `dest_stop_name` | String | The name of the destination stop |
+| `arrival_secs` | Number | The arrival time for this step, in seconds since midnight (adjusted for trips that go past midnight) |
+| `trip_id` | String | The ID of the public transport trip. This will be "footpath" if the step is a walking segment |
+| `agency_name` | String | The name of the transit agency (e.g., "Metro"). This will be an empty string for walking segments |
+
+**Example JSON Request and Response**
+```bash
+curl -X POST http://localhost:18080/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "5777",
+    "target": "5776",
+    "year": 2025,
+    "month": 7,
+    "day": 23,
+    "hours": 22,
+    "minutes": 30
+  }'
+```
+
+```json
+{
+  "elapsed_time_ms": 58,
+  "journeys": [
+    {
+      "duration": 120,
+      "steps": [
+        {
+          "agency_name": "Metro",
+          "arrival_secs": 81420,
+          "day": "current",
+          "departure_secs": 81300,
+          "dest_stop_id": "5776",
+          "dest_stop_name": "Pólo",
+          "src_stop_id": "5777",
+          "src_stop_name": "Salgueiros",
+          "step_duration_secs": 120,
+          "step_id": 1,
+          "trip_id": "DU406"
+        }
+      ]
+    }
+  ],
+  "journeys_length": 1
+}
+```
+
+### Improved Walking Path Calculation with OSRM and Redis
+
+A fundamental improvement was made to the algorithm's accuracy: 
+the calculation of walking durations (`footpaths`) between stops
+
+- **Previous Functionality: Estimation with Manhattan Distance**
+
+The original version of the code (`Raptor::initializeFootpaths`) calculated the duration of walking transfers using a 
+mathematical estimation. The method was based on the `Manhattan Distance` between the geographical coordinates 
+(latitude and longitude) of two stops, applying a `fixed average walking speed` to derive the `duration`.  
+While fast, this method is inaccurate as it ignores the actual street topology, obstacles, elevations, 
+and the real-world layout of pedestrian paths.
+
+- **Current Functionality: Real-World Data from OSRM via Redis**
+
+The new implementation (`Raptor::initializeFootpathsOSRM`) uses much more accurate route data, pre-calculated with 
+the `Open Source Routing Machine (OSRM)`. OSRM calculates the optimal walking duration using the real street network.  
+To optimize performance at application startup, these `durations were pre-processed and stored in a Redis` in-memory 
+database. Now, during initialization, the application connects to Redis to fetch these realistic values.
+
+**Key Advantages:**  
+- **Accuracy**: Walking durations reflect `real-world paths`, resulting in much more reliable route suggestions and 
+arrival times for the user  
+- **Performance**: By using Redis, the application avoids the computational cost of calculating these durations at 
+startup. The initialization of `footpaths` is now an extremely fast data-retrieval operation. `Startup takes 
+less than 4 minutes`, compared to around 27 minutes (sequential version) and 10 minutes (parallel version) when 
+calculating durations on the fly  
+- **Flexibility**: The system is `decoupled`. The walking data can be updated or generated by other tools 
+(like Valhalla or Google Maps) and populated into Redis without any changes to the main application
+
+<br>
+
 ### Setting up the Project Environment in a UNIX-like terminal
 1. **Clone the Repository**
     ```bash 
