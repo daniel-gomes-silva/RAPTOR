@@ -143,7 +143,7 @@ and the real-world layout of pedestrian paths.
 - **Current Functionality: Real-World Data from OSRM via Redis**
 
 The new implementation (`Raptor::initializeFootpathsOSRM`) uses much more accurate route data, pre-calculated with 
-the `Open Source Routing Machine (OSRM)`. OSRM calculates the optimal walking duration using the real street network.  
+the `Open Source Routing Machine (OSRM)`. OSRM calculates the optimal walking `duration using the real street network`.  
 To optimize performance at application startup, these `durations were pre-processed and stored in a Redis` in-memory 
 database. Now, during initialization, the application connects to Redis to fetch these realistic values.
 
