@@ -86,6 +86,9 @@ Each step of the journey contains detailed information about that segment:
 | `agency_name` | String | The name of the transit agency (e.g., "Metro"). This will be an empty string for walking segments |
 
 **Example JSON Request and Response**
+
+**Tip:** To make the API response more readable, you can pipe the `curl` output through `jq`
+
 ```bash
 curl -X POST http://localhost:18080/query \
   -H "Content-Type: application/json" \
@@ -97,7 +100,7 @@ curl -X POST http://localhost:18080/query \
     "day": 23,
     "hours": 22,
     "minutes": 30
-  }'
+  }' | jq
 ```
 
 ```json
