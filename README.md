@@ -63,7 +63,7 @@ from the origin to the destination. The structure of the main JSON response obje
 | `journeys_length` | Number | The total number of journey options found |
 | `journeys` | Array | An array of objects, where each object represents a complete journey option |
 
-- **Journey Object** (within the `journeys` array) 
+- **Journey Object** (within the `journeys` array)  
 Each object within the journeys array represents a complete journey and has the following structure:
 
 | Key | Type | Description |
@@ -71,7 +71,7 @@ Each object within the journeys array represents a complete journey and has the 
 | `duration` | Number | The total duration of the journey in seconds |
 | `steps` | Array | An array of objects, where each object represents a step or segment of the journey (e.g., walking, taking a bus) |
 
-- **Step Object** (within the `steps` array)
+- **Step Object** (within the `steps` array)  
 Each step of the journey contains detailed information about that segment:
 
 | Key | Type   | Description |
