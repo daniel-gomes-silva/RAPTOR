@@ -14,6 +14,9 @@ interactive tool to a backend service that can be easily integrated with web fro
 **Key Changes:**
 - **Hardcoded Datasets**: For demonstration purposes, the application is now hardcoded to load GTFS data for Porto's 
 metro and STCP bus networks from the `../datasets/` directory
+  - Download the latest GTFS files:
+    - [Metro do Porto GTFS](https://opendata.porto.digital/dataset/horarios-paragens-e-rotas-em-formato-gtfs)
+    - [STCP GTFS](https://opendata.porto.digital/dataset/horarios-paragens-e-rotas-em-formato-gtfs-stcp)
 - **Web Server**: It initializes a Crow web server that listens on `port 18080`
 - **API Endpoint**: It provides a single endpoint, `POST /query`, to handle all routing requests
 
